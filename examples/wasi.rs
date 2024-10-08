@@ -1,3 +1,5 @@
+use std::fs;
+
 use anyhow::Result;
 use wasi_common::sync::WasiCtxBuilder;
 use wasmtime::*;
@@ -63,6 +65,13 @@ impl WasmInstance {
     fn free_result(&mut self, ptr: i32) -> Result<()> {
         self.call_function("free_result", ptr)
     }
+
+    fn call_string_function(&mut self, name: &str) -> Result<String> {
+        let result_ptr: i32 = self.call_function(name, ())?;
+        let result_string = self.read_string(result_ptr)?;
+        self.free_result(result_ptr)?;
+        Ok(result_string)
+    }
 }
 
 fn main() -> Result<()> {
@@ -83,12 +92,16 @@ fn main() -> Result<()> {
     }
 
     // Call the function and get the result
-    let result_ptr: i32 = wasm_instance.call_function("hello_endpoint_c", ())?;
-    let result_string = wasm_instance.read_string(result_ptr)?;
+    let result_string = wasm_instance.call_string_function("hello_endpoint_c")?;
     println!("Result string: {}", result_string);
+	let get_routes_string = wasm_instance.call_string_function("get_routes_c")?;
+	println!("get_routes_string: {}", get_routes_string);
 
-    // Free the result in WebAssembly memory
-    wasm_instance.free_result(result_ptr)?;
+	let openapi_spec_string = wasm_instance.call_string_function("get_openapi_spec_c")?;
+	// println!("openapi_spec_string: {}", openapi_spec_string);
+	// save to file openapi.json
+	fs::write("openapi.json", openapi_spec_string)?;
 
+	
     Ok(())
 }

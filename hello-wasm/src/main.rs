@@ -97,9 +97,14 @@ pub extern "C" fn dealloc(ptr: *mut u8, size: usize) {
 }
 
 #[no_mangle]
-pub extern "C" fn get_routes_c() -> *mut c_char {
+pub extern "C" fn get_routes_c() -> *mut u64 {
     let result = get_routes();
-    CString::new(result).unwrap().into_raw()
+    let c_string = CString::new(result).unwrap();
+    let ptr = c_string.into_raw();
+    let len = unsafe { CStr::from_ptr(ptr) }.to_bytes().len();
+    
+    let result_with_len = Box::new([ptr as u64, len as u64]);
+    Box::into_raw(result_with_len) as *mut u64
 }
 
 #[no_mangle]
@@ -124,17 +129,27 @@ pub extern "C" fn free_result(ptr: *mut u64) {
     }
 }
 #[no_mangle]
-pub extern "C" fn handle_request_c(route: *const c_char, params: *const c_char) -> *mut c_char {
+pub extern "C" fn handle_request_c(route: *const c_char, params: *const c_char) -> *mut u64 {
     let route = unsafe { CStr::from_ptr(route).to_str().unwrap() };
     let params = unsafe { CStr::from_ptr(params).to_str().unwrap() };
     let result = handle_request(route, params);
-    CString::new(result).unwrap().into_raw()
+    let c_string = CString::new(result).unwrap();
+    let ptr = c_string.into_raw();
+    let len = unsafe { CStr::from_ptr(ptr) }.to_bytes().len();
+    
+    let result_with_len = Box::new([ptr as u64, len as u64]);
+    Box::into_raw(result_with_len) as *mut u64
 }
 
 #[no_mangle]
-pub extern "C" fn get_openapi_spec_c() -> *mut c_char {
+pub extern "C" fn get_openapi_spec_c() -> *mut u64 {
     let result = get_openapi_spec();
-    CString::new(result).unwrap().into_raw()
+    let c_string = CString::new(result).unwrap();
+    let ptr = c_string.into_raw();
+    let len = unsafe { CStr::from_ptr(ptr) }.to_bytes().len();
+    
+    let result_with_len = Box::new([ptr as u64, len as u64]);
+    Box::into_raw(result_with_len) as *mut u64
 }
 
 #[no_mangle]
