@@ -3,7 +3,7 @@ use serde::{Serialize, Deserialize};
 use std::collections::HashMap;
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
-
+use std::mem;
 #[derive(OpenApi)]
 #[openapi(
     paths(
@@ -36,7 +36,7 @@ struct GreetResponse {
 )]
 fn hello_endpoint() -> String {
     serde_json::to_string(&HelloResponse {
-        message: "World".to_string(),
+        message: "World1212121".to_string(),
     }).unwrap()
 }
 
@@ -103,6 +103,27 @@ pub extern "C" fn get_routes_c() -> *mut c_char {
 }
 
 #[no_mangle]
+pub extern "C" fn hello_endpoint_c() -> *mut u64 {
+    let result = hello_endpoint();
+    let c_string = CString::new(result).unwrap();
+    let ptr = c_string.into_raw();
+    let len = unsafe { CStr::from_ptr(ptr) }.to_bytes().len();
+    
+    let result_with_len = Box::new([ptr as u64, len as u64]);
+    Box::into_raw(result_with_len) as *mut u64
+}
+
+#[no_mangle]
+pub extern "C" fn free_result(ptr: *mut u64) {
+    if !ptr.is_null() {
+        unsafe {
+            let box_array = Box::from_raw(ptr as *mut [u64; 2]);
+            let [string_ptr, _] = *box_array;
+            free_string(string_ptr as *mut c_char);
+        }
+    }
+}
+#[no_mangle]
 pub extern "C" fn handle_request_c(route: *const c_char, params: *const c_char) -> *mut c_char {
     let route = unsafe { CStr::from_ptr(route).to_str().unwrap() };
     let params = unsafe { CStr::from_ptr(params).to_str().unwrap() };
@@ -128,5 +149,5 @@ pub extern "C" fn free_string(ptr: *mut c_char) {
 fn main() {
     // This main function can be used for initialization if needed
     println!("WebAssembly module initialized {}", handle_request("/hello", "David"));
-    println!("OpenAPI spec: {}", get_openapi_spec());
+    // println!("OpenAPI spec: {}", get_openapi_spec());
 }

@@ -9,3 +9,4 @@ wasi-common = "25.0.1"
 anyhow = "1.0.89"
 wasmtime-wasi = "25.0.1"
 tokio = { version = "1.40.0", features = ["full"] }
+bytemuck = "1.18.0"
