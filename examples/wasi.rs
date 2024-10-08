@@ -72,11 +72,38 @@ impl WasmInstance {
         self.free_result(result_ptr)?;
         Ok(result_string)
     }
+
+    fn call_handle_request(&mut self, route: &str, params: &str) -> Result<String> {
+        let route_ptr = self.allocate_string(route)?;
+        let params_ptr = self.allocate_string(params)?;
+
+        let result_ptr: i32 = self.call_function("handle_request_c", (route_ptr, params_ptr))?;
+
+        // Free the allocated strings
+        self.free_string(route_ptr)?;
+        self.free_string(params_ptr)?;
+
+        let result_string = self.read_string(result_ptr)?;
+        self.free_result(result_ptr)?;
+        Ok(result_string)
+    }
+
+    fn allocate_string(&mut self, s: &str) -> Result<i32> {
+        let bytes = s.as_bytes();
+        let len = bytes.len();
+        let ptr: i32 = self.call_function("alloc", len as i32)?;
+        self.memory.write(&mut self.store, ptr as usize, bytes)?;
+        Ok(ptr)
+    }
+
+    fn free_string(&mut self, ptr: i32) -> Result<()> {
+        self.call_function("free_string", ptr)
+    }
 }
 
 fn main() -> Result<()> {
     let engine = Engine::default();
-    let wasm_file = "/Users/davidviejo/poc/test-python/wasmer_server/testwasmtime/hello-wasm/target/wasm32-wasi/release/hello-wasm.wasm";
+    let wasm_file = "./hello-wasm/target/wasm32-wasi/release/hello-wasm.wasm";
 
     let mut wasm_instance = WasmInstance::new(&engine, wasm_file)?;
 
@@ -94,14 +121,25 @@ fn main() -> Result<()> {
     // Call the function and get the result
     let result_string = wasm_instance.call_string_function("hello_endpoint_c")?;
     println!("Result string: {}", result_string);
-	let get_routes_string = wasm_instance.call_string_function("get_routes_c")?;
-	println!("get_routes_string: {}", get_routes_string);
+    let get_routes_string = wasm_instance.call_string_function("get_routes_c")?;
+    println!("get_routes_string: {}", get_routes_string);
 
-	let openapi_spec_string = wasm_instance.call_string_function("get_openapi_spec_c")?;
-	// println!("openapi_spec_string: {}", openapi_spec_string);
-	// save to file openapi.json
-	fs::write("openapi.json", openapi_spec_string)?;
+    let openapi_spec_string = wasm_instance.call_string_function("get_openapi_spec_c")?;
+    // println!("openapi_spec_string: {}", openapi_spec_string);
+    // save to file openapi.json
+    fs::write("openapi.json", openapi_spec_string)?;
 
-	
+    // Call handle_request with two parameters
+    let route = "/hello";
+    let params = "{}"; // Empty JSON object as a string
+    let result = wasm_instance.call_handle_request(route, params)?;
+    println!("handle_request result: {}", result);
+
+    // Example with /greet/{name}
+    let route = "/greet/{name}";
+    let params = r#"{\"name": "Alice"}"#;
+    let result = wasm_instance.call_handle_request(route, params)?;
+    println!("handle_request result: {}", result);
+
     Ok(())
 }

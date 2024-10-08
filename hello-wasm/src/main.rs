@@ -1,18 +1,13 @@
-use utoipa::OpenApi;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::ffi::{CStr, CString};
-use std::os::raw::c_char;
 use std::mem;
+use std::os::raw::c_char;
+use utoipa::OpenApi;
 #[derive(OpenApi)]
 #[openapi(
-    paths(
-        hello_endpoint,
-        greet_endpoint
-    ),
-    components(
-        schemas(HelloResponse, GreetResponse)
-    )
+    paths(hello_endpoint, greet_endpoint),
+    components(schemas(HelloResponse, GreetResponse))
 )]
 struct ApiDoc;
 
@@ -37,7 +32,8 @@ struct GreetResponse {
 fn hello_endpoint() -> String {
     serde_json::to_string(&HelloResponse {
         message: "World1212121".to_string(),
-    }).unwrap()
+    })
+    .unwrap()
 }
 
 #[utoipa::path(
@@ -54,7 +50,8 @@ fn greet_endpoint(name: &str) -> String {
     serde_json::to_string(&GreetResponse {
         greeting: "Hello".to_string(),
         name: name.to_string(),
-    }).unwrap()
+    })
+    .unwrap()
 }
 
 fn get_routes() -> String {
@@ -63,14 +60,30 @@ fn get_routes() -> String {
 }
 
 fn handle_request(route: &str, params: &str) -> String {
-    let params: HashMap<String, String> = serde_json::from_str(params).unwrap_or_default();
-    
+
+    let params_json: HashMap<String, String> = match serde_json::from_str(params) {
+        Ok(map) => map,
+        Err(e) => {
+            println!("Debug - Error parsing params: {:?} {}", e, params);
+            HashMap::new()
+        }
+    };
+
     match route {
         "/hello" => hello_endpoint(),
         "/greet/{name}" => {
-            let name = params.get("name").cloned().unwrap_or_else(|| "Guest".to_string());
-            greet_endpoint(&name)
-        },
+            let name = params_json
+                .get("name")
+                .cloned()
+                .unwrap_or_else(|| "Guest".to_string());
+            println!("Debug - name: {}", name);
+            format!(
+                "source: {} params: {} result: {}",
+                route,
+                serde_json::to_string(&params_json).unwrap(),
+                greet_endpoint(&name)
+            )
+        }
         _ => serde_json::to_string(&HashMap::from([("error", "Not Found")])).unwrap(),
     }
 }
@@ -102,7 +115,7 @@ pub extern "C" fn get_routes_c() -> *mut u64 {
     let c_string = CString::new(result).unwrap();
     let ptr = c_string.into_raw();
     let len = unsafe { CStr::from_ptr(ptr) }.to_bytes().len();
-    
+
     let result_with_len = Box::new([ptr as u64, len as u64]);
     Box::into_raw(result_with_len) as *mut u64
 }
@@ -113,7 +126,7 @@ pub extern "C" fn hello_endpoint_c() -> *mut u64 {
     let c_string = CString::new(result).unwrap();
     let ptr = c_string.into_raw();
     let len = unsafe { CStr::from_ptr(ptr) }.to_bytes().len();
-    
+
     let result_with_len = Box::new([ptr as u64, len as u64]);
     Box::into_raw(result_with_len) as *mut u64
 }
@@ -130,13 +143,27 @@ pub extern "C" fn free_result(ptr: *mut u64) {
 }
 #[no_mangle]
 pub extern "C" fn handle_request_c(route: *const c_char, params: *const c_char) -> *mut u64 {
-    let route = unsafe { CStr::from_ptr(route).to_str().unwrap() };
-    let params = unsafe { CStr::from_ptr(params).to_str().unwrap() };
+    // Convert C strings to Rust strings safely
+    let route = unsafe { 
+        CStr::from_ptr(route)
+            .to_str()
+            .unwrap_or_default()
+    };
+    let params = unsafe { 
+        CStr::from_ptr(params)
+            .to_str()
+            .unwrap_or_default()
+    };
+    println!("route: {}", route);
+    println!("params: {}", params);
+    // Handle the request
     let result = handle_request(route, params);
+
+    // Convert the result to a C string and return
     let c_string = CString::new(result).unwrap();
     let ptr = c_string.into_raw();
     let len = unsafe { CStr::from_ptr(ptr) }.to_bytes().len();
-    
+
     let result_with_len = Box::new([ptr as u64, len as u64]);
     Box::into_raw(result_with_len) as *mut u64
 }
@@ -147,7 +174,7 @@ pub extern "C" fn get_openapi_spec_c() -> *mut u64 {
     let c_string = CString::new(result).unwrap();
     let ptr = c_string.into_raw();
     let len = unsafe { CStr::from_ptr(ptr) }.to_bytes().len();
-    
+
     let result_with_len = Box::new([ptr as u64, len as u64]);
     Box::into_raw(result_with_len) as *mut u64
 }
@@ -155,7 +182,9 @@ pub extern "C" fn get_openapi_spec_c() -> *mut u64 {
 #[no_mangle]
 pub extern "C" fn free_string(ptr: *mut c_char) {
     unsafe {
-        if ptr.is_null() { return }
+        if ptr.is_null() {
+            return;
+        }
         CString::from_raw(ptr)
     };
 }
@@ -163,6 +192,9 @@ pub extern "C" fn free_string(ptr: *mut c_char) {
 // Main function (optional, depending on your WebAssembly runtime)
 fn main() {
     // This main function can be used for initialization if needed
-    println!("WebAssembly module initialized {}", handle_request("/hello", "David"));
+    println!(
+        "WebAssembly module initialized {}",
+        handle_request("/hello", "David")
+    );
     // println!("OpenAPI spec: {}", get_openapi_spec());
 }
